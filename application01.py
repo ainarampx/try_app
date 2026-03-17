@@ -211,7 +211,6 @@ app.layout = dbc.Container([
 # ============================================================
 # 5) CALLBACK
 # ============================================================
-
 @app.callback(
     Output("kpi_ca", "children"),
     Output("kpi_n", "children"),
@@ -222,18 +221,121 @@ app.layout = dbc.Container([
     Input("zone_dd", "value"),
 )
 def update(zone_value):
-    fig_bar = px.bar(x=[1, 2, 3], y=[3, 1, 2], title="Test bar")
-    fig_line = px.line(x=[1, 2, 3], y=[1, 4, 2], title="Test line")
 
-    return (
-        html.Div("KPI CA OK"),
-        html.Div("KPI N OK"),
-        fig_bar,
-        fig_line,
-        [{"name": "A", "id": "A"}],
-        [{"A": "test 1"}, {"A": "test 2"}]
+    dff = df_base.copy()
+
+    # Filtre multi-zones
+    if zone_value and len(zone_value) > 0:
+        dff = dff[dff[zone_col].astype(str).isin([str(z) for z in zone_value])]
+
+    # Sécurité si vide
+    if dff.empty:
+        empty_bar = px.bar(title="Frequence des 10 meilleures ventes")
+        empty_line = px.line(title="Evolution du chiffre d'affaire par semaine")
+        return (
+            kpi_block("—", 0, 0, is_money=True),
+            kpi_block("—", 0, 0, is_money=False),
+            empty_bar,
+            empty_line,
+            [],
+            []
+        )
+
+    # Mois courant
+    current_month = int(dff["Month"].max())
+
+    # KPI CA
+    m1, ca_cur, ca_delta = indicateur_du_mois(
+        dff, current_month=current_month, freq=False, abbr=False
+    )
+    kpi_ca = kpi_block(m1, ca_cur, ca_delta, is_money=True)
+
+    # KPI ventes
+    m2, n_cur, n_delta = indicateur_du_mois(
+        dff, current_month=current_month, freq=True, abbr=False
+    )
+    kpi_n = kpi_block(m2, n_cur, n_delta, is_money=False)
+
+    # BAR TOP10
+        # BAR TOP10
+    top_df = frequence_meilleure_vente(dff, top=10)
+
+    # Sécurité si jamais top_df est vide
+    if top_df.empty:
+        fig_bar = px.bar(title="Frequence des 10 meilleures ventes")
+    else:
+        # Orden total de las catégories de la plus fréquente à la moins fréquente
+        order = (
+            top_df.groupby("Product_Category")["Frequence"]
+            .sum()
+            .sort_values(ascending=False)
+            .index.tolist()
+        )
+
+        fig_bar = px.bar(
+            top_df,
+            x="Frequence",
+            y="Product_Category",
+            color="Gender",
+            orientation="h",
+            title="Frequence des 10 meilleures ventes",
+            category_orders={"Product_Category": order},
+            color_discrete_map={"F": "#636EFA", "M": "#EF553B", "NA": "#00CC96"},
+        )
+
+        fig_bar.update_layout(
+            height=430,
+            margin=dict(l=10, r=10, t=50, b=10),
+            legend_title_text="Sexe",
+            barmode="group"
+        )
+
+        fig_bar.update_xaxes(title_text="Total vente")
+        fig_bar.update_yaxes(
+            title_text="Categorie du produit"
+        )
+    # LINE WEEKLY CA
+    weekly = (
+        dff.set_index("Transaction_Date")["Total_price"]
+        .resample("W")
+        .sum()
+        .reset_index()
+        .rename(columns={
+            "Transaction_Date": "Semaine",
+            "Total_price": "Chiffre d'affaire"
+        })
     )
 
+    fig_line = px.line(
+        weekly,
+        x="Semaine",
+        y="Chiffre d'affaire",
+        title="Evolution du chiffre d'affaire par semaine",
+    )
+    fig_line.update_layout(
+        height=360,
+        margin=dict(l=10, r=10, t=50, b=10)
+    )
+    fig_line.update_xaxes(title_text="Semaine")
+    fig_line.update_yaxes(title_text="Chiffre d'affaire")
+
+    # TABLE last 100
+    last100 = dff.sort_values("Transaction_Date", ascending=False).head(100).copy()
+    last100["Transaction_Date"] = last100["Transaction_Date"].dt.strftime("%Y-%m-%d")
+
+    show_cols = [
+        "Transaction_Date", "Gender", "Location", "Product_Category",
+        "Quantity", "Avg_Price", "Discount_pct"
+    ]
+    tbl = last100[show_cols]
+
+    columns = [
+        {"name": "Date" if c == "Transaction_Date" else c.replace("_", " "), "id": c}
+        for c in tbl.columns
+    ]
+    data = tbl.to_dict("records")
+
+    return kpi_ca, kpi_n, fig_bar, fig_line, columns, data
 
 # ============================================================
 # 6) RUN
