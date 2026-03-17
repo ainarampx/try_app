@@ -147,6 +147,7 @@ HEADER_STYLE = {"backgroundColor": "#b9dbe7", "padding": "10px 12px", "border": 
 PANEL_STYLE  = {"border": "1px solid #ddd", "padding": "10px", "backgroundColor": "white"}
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server= app.server
 
 app.layout = dbc.Container([
 
