@@ -341,7 +341,5 @@ def update(zone_value):
 # 6) RUN
 # ============================================================
 
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
 if __name__ == "__main__":
     app.run(debug=False)
